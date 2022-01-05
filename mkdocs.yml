@@ -1,0 +1,32 @@
+site_name: SANS HHC 2021 writeup, Objective 10 (Now Hiring!)
+site_author: Joe Ammond (pugpug)
+copyright: Joe Ammond - <a href="https://twitter.com/joeammond">@joeammond</a>
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - footnotes
+  - attr_list
+  - admonition
+  - toc:
+      permalink: "#"
+theme:
+  name: material
+plugins:
+  - search
+  - pdf-export:
+      enabled_if_env: ENABLE_PDF_EXPORT
+extra:
+  social:
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/joeammond
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/joeammond/
+    - icon: fontawesome/brands/github
+      link: https://github.com/joeammond
+extra_css:
+  - css/print.css
+nav:
+- Home: 'https://ammond.org'
+- Introduction: 'introduction.md'
+- Solution: 'solution.md'
