@@ -14,8 +14,9 @@ theme:
   name: material
 plugins:
   - search
-  - pdf-export:
-      enabled_if_env: ENABLE_PDF_EXPORT
+#  - with-pdf
+#  - pdf-export:
+#      enabled_if_env: ENABLE_PDF_EXPORT
 extra:
   social:
     - icon: fontawesome/brands/twitter
@@ -24,9 +25,10 @@ extra:
       link: https://www.linkedin.com/in/joeammond/
     - icon: fontawesome/brands/github
       link: https://github.com/joeammond
-extra_css:
-  - css/print.css
+#extra_css:
+#  - css/print.css
 nav:
 - Home: 'https://ammond.org'
 - Introduction: 'introduction.md'
 - Solution: 'solution.md'
+- Reverse Engineering the Application: 'reversing.md'

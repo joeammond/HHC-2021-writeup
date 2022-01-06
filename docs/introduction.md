@@ -1,6 +1,4 @@
-# pugpug's 2021 Holiday Hack writeup
-
-## Introduction
+# Introduction
 
 This year's [Holiday Hack Challenge](https://2021.kringlecon.com)
 was an interesting mix of challenges, including web app hacking,

