@@ -31,4 +31,5 @@ nav:
 - Home: 'https://ammond.org'
 - Introduction: 'introduction.md'
 - Solution: 'solution.md'
-- Reverse Engineering the Application: 'reversing.md'
+- Reverse Engineering the Application Environment: 'reversing.md'
+- LFI to RCE... maybe?: 'rce.md'
