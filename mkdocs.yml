@@ -33,3 +33,4 @@ nav:
 - Solution: 'solution.md'
 - Reverse Engineering the Application Environment: 'reversing.md'
 - LFI to RCE... maybe?: 'rce.md'
+- Conclustion: 'conclusion.md'
