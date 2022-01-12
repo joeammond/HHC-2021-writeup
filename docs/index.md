@@ -15,5 +15,10 @@ vulnerability to read more than just files: for example, running processes
 or open network connections can be determined as well.
 
 My writeup doesn't include any of the other challenges. For the remaining
-ones I don't cover, I recommend reading [@CraHan's](https://twitter.com/crahan)
-excellent writeup, available [here](https://n00.be/HolidayHackChallenge2021/).
+ones I don't cover, I recommend reading these writeups, as they're much
+more complete than mine:
+
+- [@CraHan's](https://twitter.com/crahan) writeup is always excellent, available [here](https://n00.be/HolidayHackChallenge2021/).
+- [@JeshuaErickson](https://twitter.com/JeshuaErickson), available [here](https://jeshuaerickson.github.io/hh2021/)
+- [@0xdf](https://twitter.com/0xdf_), excellent as usual, read it [here](https://0xdf.gitlab.io/holidayhack2021/)
+- [Kyle_Parrish_ / Arnydo](https://twitter.com/Kyle_Parrish_), go [here](https://arnydo.gitlab.io/hhc21/) to read it.

